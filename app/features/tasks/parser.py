@@ -26,19 +26,21 @@ STRICT SCOPE RULES:
 Output format: a single JSON object with a root key "actions".
 Allowed actions: CREATE_TASK, UPDATE_TASK, DELETE_TASK, SEARCH_TASKS, LIST_TASKS, CLARIFY, OUT_OF_SCOPE.
 
-Example of a joke request:
-User: "tell me a joke"
-Output: {{"actions": [{{"action": "OUT_OF_SCOPE"}}]}}
-
-Example of a task request:
-User: "create a task to do laundry tomorrow"
-Output: {{"actions": [{{"action": "CREATE_TASK", "title": "Do laundry", "due_date": "Tomorrow", "priority": "Medium", "status": "To do"}}]}}
-
 Rules:
-1. Compound instructions -> multiple action objects.
-2. "status" MUST be strictly one of: "To do", "In progress", "Done", or null.
-3. "priority" MUST be strictly one of: "Low", "Medium", "High", or null.
-4. Output ONLY valid JSON.
+1. Compound instructions -> multiple action objects. If the user gives a long sentence with "and", split it into multiple actions.
+2. If the user phrases an update as "status of [task] to [new status]" or "priority for [task] to [new priority]", extract the exact [task] into "target_query".
+3. "status" MUST be strictly one of: "To do", "In progress", "Done", or null.
+4. "priority" MUST be strictly one of: "Low", "Medium", "High", or null.
+5. Output ONLY valid JSON.
+
+Example of a compound request:
+User: "create a new task titled study the docs of langGraph with priority high for today and set status of focused reasoning to done"
+Output: {{
+  "actions": [
+    {{"action": "CREATE_TASK", "title": "Study the docs of langGraph", "priority": "High", "due_date": "Today", "status": "To do"}},
+    {{"action": "UPDATE_TASK", "target_query": "focused reasoning", "status": "Done"}}
+  ]
+}}
 """
 
 STRIP_CHARS = " .'\"“”"
@@ -61,31 +63,50 @@ def deterministic_nlp_parser(user_message: str) -> AgentPlan:
     if not msg:
         return AgentPlan(actions=[AgentAction(action="OUT_OF_SCOPE")])
 
-    clauses = re.split(r"\s+and\s+(?=(?:create|add|move|mark|complete|finish|change|set|update|delete|remove|find|show|list|search)\b)", msg, flags=re.IGNORECASE)
+    # Expanded verbs so it splits "do task A AND SET task B"
+    clauses = re.split(
+        r"\s+and\s+(?=(?:create|add|move|mark|complete|finish|change|set|update|delete|remove|find|show|list|search|send|buy|call|email|write|clean|read|do|make|prepare|plan|review|check|schedule|remind|assign)\b)", 
+        msg, 
+        flags=re.IGNORECASE
+    )
+    
     actions: List[AgentAction] = []
 
     for clause in clauses:
         c = clause.strip().rstrip(".")
         c_low = c.lower()
 
-        if re.match(r"^(create|add|new|make)\b", c_low):
+        # 1. CREATE TASK (Handles "a new task titled...")
+        if re.match(r"^(?:a\s+|an\s+|the\s+)?(create|add|new|make|task)\b", c_low):
             prio = _extract_priority(c) or "Medium"
             due = _extract_due_date(c) or ""
-            m = re.search(r"task\s+(?:to|for|:)\s+(.+)$", c, flags=re.IGNORECASE)
-            raw_title = m.group(1) if m else re.sub(r"^(create|add|make)\s+(?:a\s+)?(?:high|medium|low)?(?:-|\s)?(?:priority\s+)?(?:task\s*)?", "", c, flags=re.IGNORECASE)
+            
+            # Extract title after words like "task titled", "task to", etc.
+            m_title = re.search(r"(?:task\s+|titled\s+|task\s+to\s+|task\s+for\s+|task\s*:\s*)(.+)$", c, flags=re.IGNORECASE)
+            if m_title:
+                raw_title = m_title.group(1)
+            else:
+                raw_title = re.sub(r"^(?:a\s+|an\s+)?(create|add|make|new)\s+(?:a\s+)?(?:high|medium|low)?(?:-|\s)?(?:priority\s+)?(?:task\s*)?", "", c, flags=re.IGNORECASE)
+                
+            # Clean up the title by removing due date and priority phrases
             if due:
-                raw_title = re.sub(rf"\b(?:by|on|for)?\s*{due}\b", "", raw_title, flags=re.IGNORECASE).strip()
+                raw_title = re.sub(rf"\b(?:by|on|for|due)?\s*{due}\b", "", raw_title, flags=re.IGNORECASE).strip()
+            raw_title = re.sub(r"\b(?:with\s+)?(?:priority\s+)?(?:high|medium|low)\b", "", raw_title, flags=re.IGNORECASE).strip()
+            
             clean_title = raw_title.strip(STRIP_CHARS)
             clean_title = (clean_title[0].upper() + clean_title[1:]) if clean_title else "New Task"
             actions.append(AgentAction(action="CREATE_TASK", title=clean_title, priority=prio, status="To do", due_date=due or "Tomorrow"))
             continue
 
+        # 2. DELETE TASK
         if re.match(r"^(delete|remove|trash)\b", c_low):
             target = re.sub(r"^(delete|remove|trash)\s+(?:the\s+|my\s+)?", "", c, flags=re.IGNORECASE)
+            target = re.sub(r"\b(both|all|tasks?)\b", "", target, flags=re.IGNORECASE) # Clean up "both task"
             target = re.sub(r"\s+task$", "", target, flags=re.IGNORECASE).strip(STRIP_CHARS)
             actions.append(AgentAction(action="DELETE_TASK", target_query=target))
             continue
 
+        # 3. SEARCH / LIST
         if re.match(r"^(show|find|search|list|get)\b", c_low):
             status_filter = None
             if "unfinished" in c_low or "incomplete" in c_low or "open" in c_low: status_filter = "UNFINISHED"
@@ -104,7 +125,8 @@ def deterministic_nlp_parser(user_message: str) -> AgentPlan:
                 else: actions.append(AgentAction(action="LIST_TASKS", priority=prio_filter, message=status_filter))
             continue
 
-        if any(w in c_low for w in ["move", "mark", "complete", "finish", "status"]):
+        # 4. MOVE / STATUS CHANGE (Simple form)
+        if any(w in c_low for w in ["move", "mark", "complete", "finish"]) and "status" not in c_low:
             new_status: Optional[str] = None
             if "in progress" in c_low: new_status = "In progress"
             elif "to do" in c_low or "todo" in c_low: new_status = "To do"
@@ -116,25 +138,43 @@ def deterministic_nlp_parser(user_message: str) -> AgentPlan:
             actions.append(AgentAction(action="UPDATE_TASK", target_query=target, status=new_status or "Done"))
             continue
 
-        if "priority" in c_low or re.match(r"^(change|update|set|edit)\b", c_low):
+        # 5. PRIORITY / STATUS UPDATE (Complex form: "set status of X to Y")
+        if any(w in c_low for w in ["priority", "status", "due", "date"]) or re.match(r"^(change|update|set|edit)\b", c_low):
             new_prio = _extract_priority(c)
             new_due = _extract_due_date(c)
             new_status = None
             if "in progress" in c_low: new_status = "In progress"
-            elif "done" in c_low: new_status = "Done"
-            elif "to do" in c_low: new_status = "To do"
+            elif "to do" in c_low or "todo" in c_low: new_status = "To do"
+            elif "done" in c_low or "completed" in c_low: new_status = "Done"
 
-            m_of = re.search(r"of\s+(?:the\s+|my\s+)?(.+?)\s+to\s+", c, flags=re.IGNORECASE)
-            if m_of:
-                target = m_of.group(1)
+            # Prioritize matching "status of X to", "priority for X to"
+            m_target = re.search(r"(?:status|priority|due date)\s+(?:of|for)\s+(.+?)\s+to\s+", c, flags=re.IGNORECASE)
+            if m_target:
+                target = m_target.group(1)
             else:
-                target = re.sub(r"^(change|update|set|edit)\s+(?:the\s+|my\s+)?(?:priority\s+of\s+)?", "", c, flags=re.IGNORECASE)
-                target = re.sub(r"\s+to\s+(?:low|medium|high|in progress|done|to do).*$", "", target, flags=re.IGNORECASE)
+                # Look for "for [task]" or "of [task]"
+                m_for = re.search(r"(?:for|on)\s+(?:the\s+|my\s+)?(.+?)(?:\s+to\s+|$)", c, flags=re.IGNORECASE)
+                if m_for:
+                    target = m_for.group(1)
+                else:
+                    # Fallback to old logic
+                    target = re.sub(r"^(change|update|set|edit)\s+(?:the\s+|my\s+)?(?:priority\s+of\s+|status\s+of\s+)?", "", c, flags=re.IGNORECASE)
+                    target = re.sub(r"\s+to\s+(?:low|medium|high|in progress|done|to do).*$", "", target, flags=re.IGNORECASE)
+
+            # Clean up the target
+            target = re.sub(r"\s+to\s+(?:low|medium|high).*$", "", target, flags=re.IGNORECASE)
+            target = re.sub(r"\b(both|all|tasks?)\b", "", target, flags=re.IGNORECASE)
             target = re.sub(r"\s+task$", "", target, flags=re.IGNORECASE).strip(STRIP_CHARS)
-            actions.append(AgentAction(action="UPDATE_TASK", target_query=target, priority=new_prio, status=new_status, due_date=new_due))
+            
+            actions.append(AgentAction(
+                action="UPDATE_TASK",
+                target_query=target,
+                priority=new_prio,
+                status=new_status,
+                due_date=new_due,
+            ))
             continue
 
-        # Fallback if no regex matches
         actions.append(AgentAction(action="OUT_OF_SCOPE"))
 
     return AgentPlan(actions=actions)
@@ -163,7 +203,7 @@ def parse_with_llm_or_fallback(user_message: str) -> AgentPlan:
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.0,
-                max_tokens=300, # STRICTLY LIMIT OUTPUT SIZE
+                max_tokens=300,
             )
             data = json.loads(response.choices[0].message.content)
             plan = AgentPlan.model_validate(data)
