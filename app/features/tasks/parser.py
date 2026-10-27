@@ -32,6 +32,7 @@ Rules:
 3. "status" MUST be strictly one of: "To do", "In progress", "Done", or null.
 4. "priority" MUST be strictly one of: "Low", "Medium", "High", or null.
 5. Output ONLY valid JSON.
+6. For requests asking for an "overview", "show all tasks", or "list everything", you MUST output a LIST_TASKS action with target_query set to null.
 
 Example of a compound request:
 User: "create a new task titled study the docs of langGraph with priority high for today and set status of focused reasoning to done"
@@ -107,7 +108,7 @@ def deterministic_nlp_parser(user_message: str) -> AgentPlan:
             continue
 
         # 3. SEARCH / LIST
-        if re.match(r"^(show|find|search|list|get)\b", c_low):
+        if re.match(r"^(show|find|search|list|get|give|overview|view|display)\b", c_low) or "all tasks" in c_low:
             status_filter = None
             if "unfinished" in c_low or "incomplete" in c_low or "open" in c_low: status_filter = "UNFINISHED"
             elif "in progress" in c_low: status_filter = "In progress"
@@ -116,13 +117,19 @@ def deterministic_nlp_parser(user_message: str) -> AgentPlan:
 
             prio_filter = _extract_priority(c)
             m_rel = re.search(r"(?:related to|about|for|matching)\s+(.+)$", c, flags=re.IGNORECASE)
+            
             if m_rel:
                 q_topic = m_rel.group(1).strip(STRIP_CHARS)
                 actions.append(AgentAction(action="SEARCH_TASKS", target_query=q_topic, status=status_filter if status_filter in ["To do", "In progress", "Done"] else None, priority=prio_filter, message=status_filter))
             else:
-                q_cleaned = re.sub(r"^(show|find|search|list|get)\s+(?:all\s+|my\s+)?(?:unfinished\s+|completed\s+)?(?:tasks\s*)?", "", c, flags=re.IGNORECASE).strip(STRIP_CHARS)
-                if q_cleaned: actions.append(AgentAction(action="SEARCH_TASKS", target_query=q_cleaned, priority=prio_filter, message=status_filter))
-                else: actions.append(AgentAction(action="LIST_TASKS", priority=prio_filter, message=status_filter))
+                # Strip out the trigger words
+                q_cleaned = re.sub(r"^(show|find|search|list|get|give me|give|overview of|overview|view|display)\s+(?:all\s+|my\s+)?(?:unfinished\s+|completed\s+)?(?:tasks\s*)?", "", c, flags=re.IGNORECASE).strip(STRIP_CHARS)
+                
+                # If the remaining query is empty or just "all", it's a LIST_TASKS action
+                if not q_cleaned or q_cleaned.lower() in ["all", "all task", "all tasks", "everything"]:
+                    actions.append(AgentAction(action="LIST_TASKS", priority=prio_filter, message=status_filter))
+                else:
+                    actions.append(AgentAction(action="SEARCH_TASKS", target_query=q_cleaned, priority=prio_filter, message=status_filter))
             continue
 
         # 4. MOVE / STATUS CHANGE (Simple form)

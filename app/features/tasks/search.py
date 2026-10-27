@@ -43,7 +43,14 @@ def find_matching_tasks(
 
     task_map = {t.id: t for t in all_tasks}
     q_clean = (query_text or "").strip().lower()
-
+    if not q_clean or q_clean in ["all", "all tasks", "overview", "everything", "my tasks"]:
+        filtered = []
+        for t in all_tasks:
+            if status_filter == "UNFINISHED" and t.status == "Done": continue
+            elif status_filter and status_filter != "UNFINISHED" and t.status.lower() != status_filter.lower(): continue
+            if priority_filter and t.priority.lower() != priority_filter.lower(): continue
+            filtered.append(t)
+        return {"matches": filtered, "ambiguous": False}
     if q_clean in task_map:
         logger.info(f"[SEARCH_DIRECT_ID] Matched exact task ID: {q_clean}")
         return {"matches": [task_map[q_clean]], "ambiguous": False}
