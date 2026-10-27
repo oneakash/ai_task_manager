@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+pydantic==2.9.2
+chromadb==0.5.15
+openai==1.51.0
+python-dotenv==1.0.1
+
+slowapi
