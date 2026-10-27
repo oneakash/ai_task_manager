@@ -65,12 +65,17 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
             board_updated = True
 
         elif act.action == "UPDATE_TASK":
-            res = find_matching_tasks(db, act.target_query or "", for_mutation=True)
+            target_q = (act.target_query or "").strip()
+            if not target_q:
+                replies.append("Please specify which task you want to update.")
+                continue
+
+            res = find_matching_tasks(db, target_q, for_mutation=True)
             if not res["matches"]:
-                replies.append(f'Could not find any task matching "{act.target_query}".')
+                replies.append(f'Could not find any task matching "{target_q}".')
             elif res["ambiguous"]:
                 titles = ", ".join(f'"{m.title}"' for m in res["matches"])
-                replies.append(f'Clarification needed: Multiple tasks match "{act.target_query}" ({titles}).')
+                replies.append(f'Clarification needed: Multiple tasks match "{target_q}" ({titles}).')
             else:
                 target = res["matches"][0]
                 changes = []
@@ -78,9 +83,15 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
                     target.status = act.status
                     if act.status == "Done": target.due_date = "Completed"
                     changes.append(f"to {act.status}")
-                if act.priority: target.priority = act.priority; changes.append(f"priority to {act.priority}")
-                if act.due_date: target.due_date = act.due_date; changes.append(f"due date to {act.due_date}")
-                if act.title: target.title = act.title[:200]; changes.append(f'title to "{target.title}"')
+                if act.priority: 
+                    target.priority = act.priority
+                    changes.append(f"priority to {act.priority}")
+                if act.due_date: 
+                    target.due_date = act.due_date
+                    changes.append(f"due date to {act.due_date}")
+                if act.title: 
+                    target.title = act.title[:200]
+                    changes.append(f'title to "{target.title}"')
                 
                 db.commit()
                 db.refresh(target)
@@ -90,11 +101,16 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
                 board_updated = True
 
         elif act.action == "DELETE_TASK":
-            res = find_matching_tasks(db, act.target_query or "", for_mutation=True)
+            target_q = (act.target_query or "").strip()
+            if not target_q:
+                replies.append("Please specify which task you want to delete.")
+                continue
+
+            res = find_matching_tasks(db, target_q, for_mutation=True)
             if not res["matches"]:
-                replies.append(f'Could not find any task matching "{act.target_query}" to delete.')
+                replies.append(f'Could not find any task matching "{target_q}" to delete.')
             elif res["ambiguous"]:
-                replies.append(f'Clarification needed before deleting: Multiple tasks match "{act.target_query}".')
+                replies.append(f'Clarification needed before deleting: Multiple tasks match "{target_q}".')
             else:
                 target = res["matches"][0]
                 remove_task_from_chroma(target.id)
@@ -104,10 +120,11 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
                 board_updated = True
 
         elif act.action in ("SEARCH_TASKS", "LIST_TASKS"):
+            target_q = (act.target_query or "").strip()
             status_filter = act.message if act.message == "UNFINISHED" else act.status
-            res = find_matching_tasks(db, act.target_query or "", status_filter=status_filter, priority_filter=act.priority, for_mutation=False)
+            res = find_matching_tasks(db, target_q, status_filter=status_filter, priority_filter=act.priority, for_mutation=False)
             if not res["matches"]:
-                replies.append(f'No matching tasks found for "{act.target_query or "your filter"}".')
+                replies.append(f'No matching tasks found for "{target_q or "your filter"}".')
             else:
                 found = ", ".join(m.title for m in res["matches"])
                 replies.append(f"Found: {found}")
@@ -117,7 +134,6 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
             replies.append(safe_clarify_message(act.message))
 
         else:  
-            # LAYER 2: OUT_OF_SCOPE kill switch. LLM text is completely ignored.
             logger.warning(f"[OUT_OF_SCOPE] Blocked free-text response: action={act.action} message='{act.message}'")
             replies.append(OUT_OF_SCOPE_REPLY)
 
@@ -132,7 +148,6 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
         board_updated=board_updated
     )
 
-# (Keep list_tasks, reset_demo_tasks, and read_log_tail here as they were previously)
 def list_tasks(db: Session) -> list[TaskModel]:
     return db.query(TaskModel).all()
 
