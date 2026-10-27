@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TASKFLOW — AI Task Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f4f7fb;
+    }
+    .chat-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-scroll::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800 p-4 md:p-8">
+
+  <!-- Main Outer Shell matching UI Reference -->
+  <div class="max-w-6xl mx-auto bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+
+    <!-- Top Dark Navy Header -->
+    <header class="bg-[#162a45] text-white px-8 py-5 flex items-center justify-between">
+      <div class="text-2xl font-bold tracking-wider">TASKFLOW</div>
+      <div class="flex items-center gap-4">
+        <span class="text-xs md:text-sm font-semibold tracking-widest text-slate-200 uppercase">AI TASK MANAGER</span>
+        <button onclick="resetDemo()" title="Reset to initial 6 demo tasks"
+          class="text-xs bg-slate-700/60 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg transition">
+          Reset Demo
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <div class="p-6 md:p-10">
+
+      <!-- Page Heading -->
+      <div class="mb-6">
+        <h1 class="text-3xl font-bold text-slate-900">My tasks</h1>
+        <p class="text-slate-500 mt-1 text-sm md:text-base">Organize tasks by asking your AI assistant</p>
+      </div>
+
+      <!-- Responsive Split-Screen Grid (Task Board Left + AI Assistant Right) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+        <!-- LEFT COLUMN: TASK BOARD (7 cols) -->
+        <section id="task-board-section" class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-xl font-bold text-slate-900">Task board</h2>
+            <span id="task-count-badge" class="bg-[#ebf2fc] text-[#1e3a8a] text-sm font-semibold px-4 py-1.5 rounded-xl">
+              All tasks 0
+            </span>
+          </div>
+
+          <!-- Task List Container -->
+          <div id="task-list" class="space-y-3.5">
+            <!-- Dynamically rendered task cards -->
+          </div>
+        </section>
+
+        <!-- RIGHT COLUMN: AI ASSISTANT CHAT (5 cols) -->
+        <section class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col h-[640px]">
+
+          <!-- Assistant Header Banner -->
+          <div class="bg-[#ebf2fc] rounded-xl px-4 py-3.5 flex items-center gap-2.5">
+            <svg class="w-5 h-5 text-[#1e40af] shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />
+            </svg>
+            <h2 class="text-lg font-bold text-[#162a45]">AI Assistant</h2>
+          </div>
+          <p class="text-xs text-slate-500 mt-2 mb-3 px-1">Manage everything with a message</p>
+
+          <!-- Scrollable Conversation Messages Area -->
+          <div id="chat-messages" class="chat-scroll flex-1 overflow-y-auto space-y-4 pr-1 py-2">
+            <!-- Pre-populated example conversation matching reference UI -->
+          </div>
+
+          <!-- Quick Demo Prompt Chips -->
+          <div class="flex flex-wrap gap-1.5 my-2">
+            <button onclick="fillPrompt('Create a high-priority task to finish the demo tomorrow.')"
+              class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-md transition">
+              + Create demo task
+            </button>
+            <button onclick="fillPrompt('Show all unfinished tasks related to documentation.')"
+              class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-md transition">
+              🔍 Search docs
+            </button>
+            <button onclick="fillPrompt('Change the priority of the API task to Low.')"
+              class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-md transition">
+              ⚡ Priority Low
+            </button>
+          </div>
+
+          <!-- Instruction Input Card -->
+          <form id="chat-form" onsubmit="handleChatSubmit(event)"
+            class="mt-1 border-2 border-[#7aa2e3] rounded-2xl p-3.5 bg-white focus-within:ring-2 focus-within:ring-blue-200 transition">
+            <label for="chat-input" class="block text-xs font-bold tracking-wider text-[#2563eb] uppercase mb-1">
+              YOUR INSTRUCTION
+            </label>
+            <input
+              id="chat-input"
+              type="text"
+              placeholder="Type a task instruction..."
+              autocomplete="off"
+              class="w-full text-sm text-slate-800 placeholder-slate-400 focus:outline-none py-1"
+            />
+            <div class="flex items-center justify-between mt-2 pt-1">
+              <span class="text-xs text-slate-400">e.g. Complete the weekly report</span>
+              <button
+                id="send-btn"
+                type="submit"
+                class="bg-[#1d5bbf] hover:bg-[#164899] text-white text-sm font-semibold px-5 py-2 rounded-xl transition shadow-xs">
+                Send
+              </button>
+            </div>
+          </form>
+
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const taskListEl = document.getElementById('task-list');
+    const taskCountBadge = document.getElementById('task-count-badge');
+    const chatMessagesEl = document.getElementById('chat-messages');
+    const chatInputEl = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+
+    let highlightedIds = [];
+
+    function getPriorityBadgeClasses(priority) {
+      if (priority === 'High') {
+        return 'bg-[#fde8e8] text-[#9b2c2c]';
+      } else if (priority === 'Medium') {
+        return 'bg-[#fef3c7] text-[#92400e]';
+      } else {
+        return 'bg-[#def7ec] text-[#046c4e]';
+      }
+    }
+
+    function renderTasks(tasks) {
+      taskCountBadge.textContent = `All tasks  ${tasks.length}`;
+      taskListEl.innerHTML = '';
+
+      tasks.forEach(task => {
+        const isDone = task.status === 'Done';
+        const isHighlighted = highlightedIds.includes(task.id);
+
+        const card = document.createElement('div');
+        card.className = `flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${
+          isHighlighted
+            ? 'bg-blue-50/70 border-blue-400 ring-2 ring-blue-200'
+            : 'bg-[#f8fafc] border-slate-200/80 hover:border-slate-300'
+        }`;
+
+        const leftDiv = document.createElement('div');
+        leftDiv.className = 'flex items-center gap-4';
+
+        // Status Circle / Checkmark Icon
+        const circle = document.createElement('div');
+        if (isDone) {
+          circle.className = 'w-6 h-6 rounded-full bg-[#def7ec] border border-[#31c48d] flex items-center justify-center text-[#057a55] shrink-0';
+          circle.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`;
+        } else {
+          circle.className = 'w-6 h-6 rounded-full bg-[#e2e8f0] border border-[#94a3b8] shrink-0';
+        }
+
+        const textDiv = document.createElement('div');
+        const titleEl = document.createElement('h3');
+        titleEl.className = `text-base font-bold ${isDone ? 'text-slate-500' : 'text-slate-900'}`;
+        titleEl.textContent = task.title;
+
+        const metaEl = document.createElement('p');
+        metaEl.className = 'text-xs text-slate-500 mt-0.5 font-medium';
+        const dueText = task.due_date ? task.due_date : 'No due date';
+        metaEl.textContent = `${dueText}  •  ${task.status}`;
+
+        textDiv.appendChild(titleEl);
+        textDiv.appendChild(metaEl);
+
+        leftDiv.appendChild(circle);
+        leftDiv.appendChild(textDiv);
+
+        // Priority Pill Badge
+        const prioBadge = document.createElement('span');
+        prioBadge.className = `text-xs font-bold px-3.5 py-1.5 rounded-lg min-w-[74px] text-center ${getPriorityBadgeClasses(task.priority)}`;
+        prioBadge.textContent = task.priority;
+
+        card.appendChild(leftDiv);
+        card.appendChild(prioBadge);
+        taskListEl.appendChild(card);
+      });
+    }
+
+    function appendUserMessage(text) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex justify-end';
+      const bubble = document.createElement('div');
+      bubble.className = 'bg-[#e1ecfe] text-slate-800 text-sm px-4 py-3 rounded-2xl rounded-br-xs max-w-[85%] shadow-2xs';
+      bubble.textContent = text;
+      wrapper.appendChild(bubble);
+      chatMessagesEl.appendChild(wrapper);
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+    }
+
+    function appendAssistantMessage(text, boardUpdated = false) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex justify-start';
+      const bubble = document.createElement('div');
+      bubble.className = 'bg-white border border-slate-200 text-slate-800 text-sm px-4 py-3 rounded-2xl rounded-bl-xs max-w-[90%] shadow-2xs space-y-1.5';
+
+      const p = document.createElement('p');
+      p.className = 'leading-relaxed whitespace-pre-line';
+      p.textContent = text;
+      bubble.appendChild(p);
+
+      if (boardUpdated) {
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.onclick = () => {
+          document.getElementById('task-board-section').scrollIntoView({ behavior: 'smooth' });
+        };
+        link.className = 'block text-xs font-bold text-[#1d5bbf] hover:underline pt-0.5';
+        link.textContent = 'View updated task board';
+        bubble.appendChild(link);
+      }
+
+      wrapper.appendChild(bubble);
+      chatMessagesEl.appendChild(wrapper);
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+    }
+
+    function fillPrompt(text) {
+      chatInputEl.value = text;
+      chatInputEl.focus();
+    }
+
+    async function loadInitialState() {
+      const res = await fetch('/api/tasks');
+      const tasks = await res.json();
+      renderTasks(tasks);
+
+      // Seed initial visual conversation from the UI reference
+      chatMessagesEl.innerHTML = '';
+      appendUserMessage('Move my presentation task to In progress.');
+      appendAssistantMessage('Done. I moved "Finish AI presentation" to In progress.', true);
+      appendUserMessage('Find tasks related to documentation.');
+      appendAssistantMessage('Found: Update API documentation', false);
+    }
+
+    async function handleChatSubmit(e) {
+      e.preventDefault();
+      const message = chatInputEl.value.trim();
+      if (!message) return;
+
+      appendUserMessage(message);
+      chatInputEl.value = '';
+      sendBtn.disabled = true;
+      sendBtn.textContent = '...';
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          appendAssistantMessage(data.detail || 'Error processing instruction.');
+        } else {
+          highlightedIds = data.highlighted_ids || [];
+          renderTasks(data.tasks);
+          appendAssistantMessage(data.reply, data.board_updated);
+        }
+      } catch (err) {
+        appendAssistantMessage('Network error connecting to the AI agent backend.');
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+      }
+    }
+
+    async function resetDemo() {
+      const res = await fetch('/api/reset', { method: 'POST' });
+      const tasks = await res.json();
+      highlightedIds = [];
+      renderTasks(tasks);
+      appendAssistantMessage('Demo state reset to the 6 reference tasks.', true);
+    }
+
+    loadInitialState();
+  </script>
+</body>
+</html>
