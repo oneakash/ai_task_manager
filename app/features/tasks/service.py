@@ -49,7 +49,7 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
 
         if act.action == "CREATE_TASK":
             new_id = generate_deterministic_id(db)
-            safe_title = (act.title or "Untitled Task")[:200] # Hard truncation
+            safe_title = (act.title or "Untitled Task")[:200]
             new_task = TaskModel(
                 id=new_id, title=safe_title, description=(act.description or "")[:1000],
                 status=act.status or "To do", priority=act.priority or "Medium", due_date=act.due_date or "Tomorrow"
@@ -134,7 +134,7 @@ def handle_chat(db: Session, message: str) -> ChatResponse:
             replies.append(safe_clarify_message(act.message))
 
         else:  
-            logger.warning(f"[OUT_OF_SCOPE] Blocked free-text response: action={act.action} message='{act.message}'")
+            logger.warning(f"[OUT_OF_SCOPE] Blocked free-text response: action={act.action}")
             replies.append(OUT_OF_SCOPE_REPLY)
 
     final_reply = " ".join(replies)
