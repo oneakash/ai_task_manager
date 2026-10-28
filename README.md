@@ -27,6 +27,8 @@ cd ai_task_manager
 
 # 2. Setup Virtual Environment & Install dependencies
 python -m venv .venv
+# or
+python3 -m venv .venv
 source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install -r requirements.txt
 
