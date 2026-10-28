@@ -30,4 +30,5 @@ def get_application_logs(lines: int = 100):
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("10/minute")
 def process_chat(request: Request, req: ChatRequest, db: Session = Depends(get_db)):
-    return service.handle_chat(db, req.message)
+    # UPDATED: Pass req.thread_id to the service
+    return service.handle_chat(db, req.message, thread_id=req.thread_id)

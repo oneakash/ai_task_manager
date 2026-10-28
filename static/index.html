@@ -250,10 +250,10 @@
 
       // Seed initial visual conversation from the UI reference
       chatMessagesEl.innerHTML = '';
-      appendUserMessage('Move my presentation task to In progress.');
-      appendAssistantMessage('Done. I moved "Finish AI presentation" to In progress.', true);
-      appendUserMessage('Find tasks related to documentation.');
-      appendAssistantMessage('Found: Update API documentation', false);
+      // appendUserMessage('Move my presentation task to In progress.');
+      // appendAssistantMessage('Done. I moved "Finish AI presentation" to In progress.', true);
+      // appendUserMessage('Find tasks related to documentation.');
+      // appendAssistantMessage('Found: Update API documentation', false);
     }
 
     async function handleChatSubmit(e) {
@@ -270,7 +270,11 @@
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message })
+          // ADDED thread_id HERE
+          body: JSON.stringify({ 
+            message: message,
+            thread_id: "user-session-1" 
+          })
         });
         const data = await res.json();
         if (!res.ok) {
@@ -288,11 +292,18 @@
       }
     }
 
+    let currentThreadId = "session-" + Date.now();
+
     async function resetDemo() {
       const res = await fetch('/api/reset', { method: 'POST' });
       const tasks = await res.json();
       highlightedIds = [];
       renderTasks(tasks);
+      
+      // Clear the LangGraph memory by generating a new thread ID
+      currentThreadId = "session-" + Date.now();
+      
+      chatMessagesEl.innerHTML = '';
       appendAssistantMessage('Demo state reset to the 6 reference tasks.', true);
     }
 

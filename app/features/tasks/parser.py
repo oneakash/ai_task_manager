@@ -33,6 +33,10 @@ Rules:
 4. "priority" MUST be strictly one of: "Low", "Medium", "High", or null.
 5. Output ONLY valid JSON.
 6. For requests asking for an "overview", "show all tasks", or "list everything", you MUST output a LIST_TASKS action with target_query set to null.
+7. If the user wants to update or delete a task but DOES NOT specify which task, 
+you must output an UPDATE_TASK or DELETE_TASK action with `target_query: null`. 
+Populate the other fields (like priority or status) based on the user's intent. 
+Do NOT use the CLARIFY action for missing task names.
 
 Example of a compound request:
 User: "create a new task titled study the docs of langGraph with priority high for today and set status of focused reasoning to done"

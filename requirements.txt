@@ -5,5 +5,7 @@ pydantic==2.9.2
 chromadb==0.5.15
 openai==1.51.0
 python-dotenv==1.0.1
-
+langgraph
+langchain-groq 
+langchain-core
 slowapi

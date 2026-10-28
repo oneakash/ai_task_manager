@@ -1,5 +1,5 @@
 import logging
-
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -35,8 +35,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.middleware("http")
 async def log_http_requests(request: Request, call_next):
-    import time
-
     start_t = time.time()
     response = await call_next(request)
     duration_ms = (time.time() - start_t) * 1000

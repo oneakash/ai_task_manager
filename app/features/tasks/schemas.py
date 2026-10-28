@@ -58,6 +58,8 @@ class AgentPlan(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=USER_MESSAGE_MAX)
+    # ADDED: thread_id for LangGraph MemorySaver
+    thread_id: str = Field(default="user-session-1")
 
 class ChatResponse(BaseModel):
     reply: str
