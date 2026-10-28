@@ -9,7 +9,7 @@ A single-page AI Task Manager built for the **AI & Vibe Coding 2-Day Challenge**
 - **Vector Store (Mandatory):** **ChromaDB** (`PersistentClient` stored in `./chroma_db`) using cosine similarity for semantic task embeddings and retrieval.
 - **Primary Source of Truth:** **SQLite + SQLAlchemy** (`tasks.db`) with deterministic task IDs (`task-1`, `task-2`, etc.) so all task states persist across browser refreshes and server restarts.
 - **AI & Action Execution Engine:** **FastAPI + Pydantic Structured Actions** (`AgentPlan` / `AgentAction`).
-  - Supports **OpenAI Structured Outputs** (`gpt-4o-mini` via `OPENAI_API_KEY`) *and* includes a built-in **Deterministic NLP Fallback Parser** so every assignment command works out-of-the-box even without an API key.
+  - Supports **Groq's OpenAI-compatible API** using the `openai/gpt-oss-20b` model (configured via `GROQ_API_KEY` and `GROQ_MODEL` in `.env`) *and* includes a built-in **Deterministic NLP Fallback Parser** so every assignment command works out-of-the-box even without an API key.
   - Supports **compound multi-step instructions** in a single message (e.g., *"Move the demo task to In progress and mark the weekly report Done"*).
   - Includes an **Ambiguity Guardrail**: if a user asks to edit or delete an ambiguous task that matches multiple records closely, the agent pauses and asks for clarification before mutating the database.
 - **Single-Page UI:** Responsive split-screen **TASKFLOW** interface (`static/index.html` with Tailwind CSS) featuring the live Task Board on the left and the AI Assistant conversation panel on the right.
@@ -19,15 +19,23 @@ A single-page AI Task Manager built for the **AI & Vibe Coding 2-Day Challenge**
 ## 2. Quick Setup & Run Instructions
 
 ```bash
-# 1. Install dependencies
+# 1. Install dependencies: Enable virtual environment and run
+git clone https://github.com/oneakash/ai_task_manager.git
+cd ai_task_manager
+python -m venv .venv
+
+	source venv/bin/activate
+
 pip install -r requirements.txt
 
-# 2. (Optional) Configure OpenAI API Key
+# 2. Configure Groq API Key
 cp .env.example .env
-# Edit .env to add OPENAI_API_KEY=sk-... (or leave blank to use the built-in NLP engine)
+# Edit .env to add your Groq credentials:
+# GROQ_API_KEY=gsk_...
+# GROQ_MODEL=openai/gpt-oss-20b
 
 # 3. Start the server
-uvicorn main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000
 ```
 
 Open **http://localhost:8000** in your browser.
